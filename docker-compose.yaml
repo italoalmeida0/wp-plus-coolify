@@ -25,6 +25,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    ports:
+      - 80:80
 
   mariadb:
     image: mariadb:latest
@@ -52,10 +54,12 @@ services:
       PMA_PORT:     3306
       UPLOAD_LIMIT: 10000M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://127.0.0.1:80"]
+      test: ["CMD", "curl", "-f", "http://127.0.0.1"]
       interval: 30s
       timeout: 10s
       retries: 5
+    ports:
+      - 80:80
 
   code-server:
     image: linuxserver/code-server:latest
@@ -74,7 +78,8 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-
+    ports:
+      - 8443:8443
   wpcli:
     build: ./wpcli
     profiles: ["tools"]
