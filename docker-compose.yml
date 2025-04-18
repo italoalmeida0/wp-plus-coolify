@@ -1,0 +1,100 @@
+version: "3.9"
+
+volumes:
+  wp_data:
+  db_data:
+  backups:
+
+services:
+
+  wordpress:
+    image: wordpress:latest
+    restart: unless-stopped
+    environment:
+      WORDPRESS_DB_HOST:       mysql
+      WORDPRESS_DB_USER:       ${SERVICE_USER_WORDPRESS}
+      WORDPRESS_DB_PASSWORD:   ${SERVICE_PASSWORD_WORDPRESS}
+      WORDPRESS_DB_NAME:       wordpress
+      WORDPRESS_TABLE_PREFIX:  ${WORDPRESS_TABLE_PREFIX:-wp_}
+    volumes:
+      - wp_data:/var/www/html/wp-content
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  mysql:
+    image: mariadb:latest
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${SERVICE_PASSWORD_ROOT}
+      MYSQL_DATABASE:      wordpress
+      MYSQL_USER:          ${SERVICE_USER_WORDPRESS}
+      MYSQL_PASSWORD:      ${SERVICE_PASSWORD_WORDPRESS}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: [
+        "CMD-SHELL",
+        "mysqladmin ping -h 127.0.0.1 -u ${SERVICE_USER_WORDPRESS} -p${SERVICE_PASSWORD_WORDPRESS}"
+      ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST:     mysql
+      PMA_PORT:     3306
+      UPLOAD_LIMIT: 10000M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  code-server:
+    image: linuxserver/code-server:latest
+    restart: unless-stopped
+    environment:
+      PUID:              33
+      PGID:              33
+      UMASK:             002
+      PASSWORD:          ${SERVICE_PASSWORD_CODESERVER}
+      DEFAULT_WORKSPACE: /workspace
+    volumes:
+      - code_data:/workspace
+      - wp_data:/workspace/wp-content
+      - backups:/workspace/backups
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8443/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  wpcli:
+    build: ./wpcli
+    profiles: ["tools"]
+    tty: true
+    stdin_open: true
+    working_dir: /var/www/html
+    environment:
+      WORDPRESS_DB_HOST:     mysql
+      WORDPRESS_DB_USER:     ${SERVICE_USER_WORDPRESS}
+      WORDPRESS_DB_PASSWORD: ${SERVICE_PASSWORD_WORDPRESS}
+      WORDPRESS_DB_NAME:     wordpress
+    volumes:
+      - wp_data:/var/www/html/wp-content
+      - backups:/backups
+    depends_on:
+      mysql:
+        condition: service_healthy

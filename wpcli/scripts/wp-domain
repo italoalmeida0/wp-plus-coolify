@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OLD=${1:-}; NEW=${2:-}
+if [ -z "$OLD" ] || [ -z "$NEW" ]; then
+  echo "Uso: wp-domain OLD_URL NEW_URL"; exit 1
+fi
+
+wp search-replace "$OLD" "$NEW" --all-tables --skip-columns=guid --precise
+sed -ri "s|${OLD}|${NEW}|g" wp-content/**/*.{php,html,css,js} || true
+
+echo "✅ Domínio atualizado no DB e em arquivos estáticos."

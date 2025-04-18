@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+BACKUP_DIR=/backups
+TMP=/tmp/wp-restore
+
+# 1) lista ZIPs
+mapfile -t zips < <(ls "$BACKUP_DIR"/*.zip 2>/dev/null)
+[ "${#zips[@]}" -gt 0 ] || { echo "❌ Nenhum .zip em $BACKUP_DIR"; exit 1; }
+echo "Selecione o backup:"
+select ZIP in "${zips[@]}"; do
+  [ -n "$ZIP" ] && break
+  echo "Opção inválida."
+done
+
+# 2) extrai e valida
+rm -rf "$TMP" && mkdir -p "$TMP"
+unzip -q "$ZIP" -d "$TMP"
+[[ -d "$TMP/wp-content" && -f "$TMP/db.sql" ]] \
+  || { echo "❌ backup precisa conter wp-content/ e db.sql"; exit 1; }
+
+# 3) reset + import DB
+echo "🗑 Resetando banco…"
+wp db reset --yes
+wp db import "$TMP/db.sql"
+
+# 4) detecta prefixos e URLs
+mapfile -t prefs < <(wp db query "SHOW TABLES LIKE '%_options'" --skip-column-names | sed 's/_options//')
+declare -A urlmap
+for p in "${prefs[@]}"; do
+  url=$(wp db query \
+    "SELECT option_value FROM ${p}_options WHERE option_name='siteurl' LIMIT 1;" \
+    --skip-column-names)
+  urlmap["$p"]=$url
+done
+
+# 5) seleciona site
+echo "Escolha o site (pela URL):"
+i=1
+for p in "${prefs[@]}"; do
+  echo "  $i) ${urlmap[$p]}"
+  ((i++))
+done
+read -rp "Número: " idx
+PREF=${prefs[$((idx-1))]}
+OLD_URL=${urlmap[$PREF]}
+echo "→ Prefixo detectado: ${PREF}_"
+
+# 6) novo domínio
+read -rp "Deseja alterar o domínio? (s/N) " yn
+if [[ "$yn" =~ ^[sS]$ ]]; then
+  # força remoção de path se existir
+  if [[ "$OLD_URL" =~ https?://[^/]+/.+ ]]; then
+    echo "🔔 o URL antigo tinha path; informe só o host (ex: site.com)"
+  fi
+  read -rp "Protocolo (http/https) [https]: " proto
+  proto=${proto:-https}
+  read -rp "Novo host (ex: site.com): " host
+  NEW_URL="$proto://$host"
+  echo "🔄 Substituindo no DB…"
+  wp search-replace "$OLD_URL" "$NEW_URL" --all-tables --skip-columns=guid --precise
+
+  read -rp "Atualizar links em wp-content? (s/N) " fyn
+  if [[ "$fyn" =~ ^[sS]$ ]]; then
+    echo "🔄 Substituindo em arquivos estáticos…"
+    sed -ri "s|${OLD_URL}|${NEW_URL}|g" wp-content/**/*.{php,html,css,js} || true
+  fi
+else
+  NEW_URL=$OLD_URL
+fi
+
+# 7) sync wp-content
+echo "📂 Sincronizando wp-content…"
+rsync -a --delete "$TMP/wp-content/" wp-content/
+
+# 8) instruções finais
+echo
+echo "✅ Restore concluído!"
+echo "👉 Agora defina no Coolify a ENV WORDPRESS_TABLE_PREFIX=${PREF}_ e redeploy do serviço WordPress."
