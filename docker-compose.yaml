@@ -65,10 +65,10 @@ services:
       PGID:              33
       UMASK:             002
       PASSWORD:          ${SERVICE_PASSWORD_CODESERVER}
-      DEFAULT_WORKSPACE: /workspace
+      DEFAULT_WORKSPACE: /config/workspace
     volumes:
-      - wp_data:/workspace/wp-content
-      - backups:/workspace/backups
+      - wp_data:/config/workspace/wp-content
+      - backups:/config/workspace/backups
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:8443/healthz"]
       interval: 30s
