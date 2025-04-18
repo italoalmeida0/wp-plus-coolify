@@ -59,7 +59,7 @@ services:
       timeout: 10s
       retries: 5
     ports:
-      - 80:80
+      - 81:80
 
   code-server:
     image: linuxserver/code-server:latest
