@@ -77,7 +77,6 @@ services:
       
   wpcli:
     build: ./wpcli
-    profiles: ["tools"]
     tty: true
     stdin_open: true
     working_dir: /var/www/html
