@@ -72,7 +72,6 @@ services:
       PASSWORD:          ${SERVICE_PASSWORD_CODESERVER}
       DEFAULT_WORKSPACE: /workspace
     volumes:
-      - code_data:/workspace
       - wp_data:/workspace/wp-content
       - backups:/workspace/backups
     healthcheck:
